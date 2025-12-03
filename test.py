@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 from PIL import Image
-import os
+import requests
+from io import BytesIO
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Fizik Lab: Eğitim Modu", layout="wide")
+st.set_page_config(page_title="Fizik Lab: Final", layout="wide")
 
-st.title("🎓 Fizik Lab: Enerji ve Hesaplamalar")
-st.markdown("Atışını yap, enerjini analiz et ve **soruları çözerek kendini test et!**")
+st.title("🎓 Fizik Lab: Angry Birds Eğitim Modu")
+st.markdown("Atışını yap, **Enerji Değişimini** incele ve soruları çöz!")
 st.markdown("---")
 
 # --- SESSION STATE (HAFIZA) ---
@@ -18,15 +19,15 @@ if 'prev_y' not in st.session_state: st.session_state.prev_y = None
 
 # --- SOL MENÜ ---
 st.sidebar.header("🎛️ Deney Parametreleri")
-hiz = st.sidebar.slider("Fırlatma Hızı ($V_0$)", 10, 150, 50)
-aci = st.sidebar.slider("Fırlatma Açısı ($\\theta$)", 0, 90, 60)
+hiz = st.sidebar.slider("Fırlatma Hızı ($V_0$)", 10, 150, 60)
+aci = st.sidebar.slider("Fırlatma Açısı ($\\theta$)", 0, 90, 45)
 gezegen = st.sidebar.selectbox("Gezegen Seç", ["Dünya (g=9.81)", "Ay (g=1.62)", "Mars (g=3.71)"])
 
 if "Dünya" in gezegen: g = 9.81
 elif "Ay" in gezegen: g = 1.62
 else: g = 3.71
 
-m = 1.0 # Kütle 1 kg varsayıyoruz (Hesap kolaylığı için)
+m = 1.0 # Kütle 1 kg
 
 firlat = st.sidebar.button("🚀 DENEYİ BAŞLAT", type="primary")
 
@@ -37,43 +38,61 @@ vy = hiz * np.sin(aci_rad)
 t_ucus = (2 * vy) / g
 menzil = vx * t_ucus
 h_max = (vy**2) / (2 * g)
-E_mekanik = 0.5 * m * hiz**2 # Başlangıç toplam enerji
+E_mekanik = 0.5 * m * hiz**2 
 
 # Grafik Verileri
 x_yol = vx * np.linspace(0, t_ucus, num=100)
 y_yol = vy * np.linspace(0, t_ucus, num=100) - 0.5 * g * np.linspace(0, t_ucus, num=100)**2
 
-# --- RESİM YÜKLEME ---
+# ==========================================
+# 🖼️ RESİM YÜKLEME ROBOTU (YENİ KISIM)
+# ==========================================
+bird_img = None
+kaynak = "Yok"
+
+# 1. Önce Masaüstündeki 'test.png'ye bak
 try:
     bird_img = Image.open("test.png")
+    kaynak = "Masaüstü (test.png)"
 except FileNotFoundError:
-    bird_img = None
+    # 2. Bulamazsan İnternetten İndir
+    try:
+        url = "https://upload.wikimedia.org/wikipedia/en/9/9b/Red_Angry_Bird.png"
+        response = requests.get(url, timeout=3)
+        bird_img = Image.open(BytesIO(response.content))
+        kaynak = "İnternet (Otomatik)"
+    except:
+        bird_img = None
+        kaynak = "Kırmızı Top (Yedek)"
 
 # --- EKRAN DÜZENİ ---
 col_grafik, col_veri = st.columns([2.5, 1])
 
-# --- SAĞ TARAF: ÖZET BİLGİ ---
+# --- SAĞ TARAF: BİLGİ KUTUSU ---
 with col_veri:
-    st.subheader("📊 Hızlı Bakış")
+    st.subheader("📊 Deney Verileri")
     st.metric("Menzil", f"{menzil:.1f} m")
-    st.metric("Maksimum Yükseklik", f"{h_max:.1f} m")
-    st.info(f"Cisim Kütlesi: **{m} kg**")
-    st.write("---")
-    st.caption("Aşağıdaki alıştırmaları çözmeyi unutma! 👇")
+    st.metric("Maks. Yükseklik", f"{h_max:.1f} m")
+    st.info(f"Görsel Kaynağı: **{kaynak}**") # Hangi resmin kullanıldığını yazar
+    st.caption("Aşağıdaki soruları çözmeyi unutma! 👇")
 
-# --- GRAFİK FONKSİYONU (V9 ile Aynı - Vektörlü) ---
+# --- GRAFİK FONKSİYONU ---
 grafik_yeri = col_grafik.empty()
 
 def plot_lab_mode(t_limit=None):
     fig, (ax_main, ax_energy) = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [3, 1]})
     
-    # 1. YÖRÜNGE GRAFİĞİ
+    # --- 1. SOL GRAFİK: YÖRÜNGE ---
     ax_main.axhline(0, color='black', linewidth=3)
+    
+    # Hafızadaki Önceki Atış (Gri İz)
     if st.session_state.prev_x is not None:
-        ax_main.plot(st.session_state.prev_x, st.session_state.prev_y, color='gray', linestyle='--', alpha=0.4, label="Önceki")
-        ax_main.legend()
+        ax_main.plot(st.session_state.prev_x, st.session_state.prev_y, color='gray', linestyle='--', alpha=0.4, label="Önceki Deney")
+        ax_main.legend(loc="upper right")
 
+    # Mevcut Atışın Hedef Yolu (Silik)
     ax_main.plot(x_yol, y_yol, 'k:', alpha=0.2)
+    
     kus_boyutu = max(menzil, 50) * 0.08 
 
     if t_limit is not None:
@@ -81,46 +100,60 @@ def plot_lab_mode(t_limit=None):
         y_now = vy * t_limit - 0.5 * g * t_limit**2
         vy_now = vy - g * t_limit
         
-        # Kırmızı Yol
+        # Kırmızı Yol Çizimi
         t_past = np.linspace(0, t_limit, num=int(t_limit*40)+2)
         ax_main.plot(vx * t_past, vy * t_past - 0.5 * g * t_past**2, 'r-', linewidth=3)
         
-        # Görsel
+        # GÖRSELİ KOY (TEST.PNG veya İNTERNET)
         if bird_img:
             ax_main.imshow(bird_img, extent=(x_now-kus_boyutu/2, x_now+kus_boyutu/2, y_now-kus_boyutu/2, y_now+kus_boyutu/2), zorder=10)
         else:
             ax_main.scatter(x_now, y_now, color='red', s=200, zorder=10, edgecolors='black')
 
-        # Enerji Hesabı (Anlık)
+        # VEKTÖRLER (OKLAR)
+        v_scale = hiz * 2.0 # Ok boyutu ölçeği
+        # Mavi Ok: Yatay Hız (Vx)
+        ax_main.quiver(x_now, y_now, vx, 0, color='blue', scale=v_scale, width=0.015, label='$V_x$')
+        # Yeşil Ok: Dikey Hız (Vy)
+        ax_main.quiver(x_now, y_now, 0, vy_now, color='green', scale=v_scale, width=0.015, label='$V_y$')
+
+        # Enerji Değerleri
         v_total = np.sqrt(vx**2 + vy_now**2)
         ke_now = 0.5 * m * v_total**2
         pe_now = m * g * y_now
     else:
+        # Başlangıç
         x_now, y_now = 0, 0
         ke_now = 0.5 * m * hiz**2
         pe_now = 0
         if bird_img:
             ax_main.imshow(bird_img, extent=(-kus_boyutu/2, kus_boyutu/2, 0, kus_boyutu), zorder=10)
 
+    # Eksen Ayarları
     ax_main.set_xlim(-kus_boyutu, max(menzil * 1.2, 50))
     ax_main.set_ylim(-kus_boyutu, max(h_max * 1.5, 30))
     ax_main.grid(True, linestyle='--', alpha=0.5)
-    ax_main.set_title("Canlı Simülasyon")
+    ax_main.set_title(f"Canlı Simülasyon ({t_limit:.2f}s)" if t_limit else "Deney Hazır")
+    ax_main.set_xlabel("Mesafe (m)")
+    ax_main.set_ylabel("Yükseklik (m)")
 
-    # 2. ENERJİ GRAFİĞİ
+    # --- 2. SAĞ GRAFİK: ENERJİ BARLARI ---
     ax_energy.bar(['KE', 'PE'], [ke_now, pe_now], color=['#1f77b4', '#ff7f0e'])
     ax_energy.axhline(E_mekanik, color='green', linestyle='--', linewidth=2, label="Toplam")
     ax_energy.set_ylim(0, E_mekanik * 1.2)
-    ax_energy.set_title("Canlı Enerji (Joule)")
-    ax_energy.text(0, ke_now, f"{int(ke_now)}", ha='center', va='bottom', fontweight='bold')
-    ax_energy.text(1, pe_now, f"{int(pe_now)}", ha='center', va='bottom', fontweight='bold')
-    ax_energy.set_yticks([])
+    ax_energy.set_title("Enerji (Joule)")
+    
+    # Barların içine değer yaz
+    ax_energy.text(0, ke_now, f"{int(ke_now)}", ha='center', va='bottom', fontweight='bold', color='black')
+    ax_energy.text(1, pe_now, f"{int(pe_now)}", ha='center', va='bottom', fontweight='bold', color='black')
+    ax_energy.set_yticks([]) # Yandaki sayıları temizle
     
     plt.tight_layout()
     return fig
 
 # --- ANİMASYON OYNATICI ---
 if firlat:
+    # 25 Karelik Hızlı Animasyon
     frame_steps = np.linspace(0, t_ucus, num=25)
     for t_step in frame_steps:
         fig = plot_lab_mode(t_step)
@@ -135,57 +168,34 @@ else:
     grafik_yeri.pyplot(plot_lab_mode(None))
 
 # ==========================================
-# 🧠 EĞİTİM BÖLÜMÜ (YENİ EKLENEN KISIM)
+# 📚 FİZİK DEFTERİ & QUIZ
 # ==========================================
 st.write("---")
-st.header("📚 Fizik Defteri: Enerji Nasıl Hesaplanır?")
+st.header("📚 Fizik Defteri: Enerji ve Hız")
 
-col_formul1, col_formul2, col_soru = st.columns([1, 1, 1.2])
+col_f1, col_f2, col_q = st.columns([1, 1, 1.2])
 
-with col_formul1:
-    st.subheader("🔵 Kinetik Enerji (Hız)")
-    st.write("Cismin hareketinden kaynaklanan enerjidir.")
-    st.latex(r"KE = \frac{1}{2} \cdot m \cdot V^2")
-    st.markdown("**Başlangıç Anı İçin Hesap:**")
-    st.code(f"""
-KE = 0.5 * {m} * ({hiz})^2
-KE = {0.5 * m * hiz**2:.1f} Joule
-    """)
-    st.info("Hız arttıkça karesi oranında artar!")
+with col_f1:
+    st.subheader("🔵 Kinetik Enerji (Hareket)")
+    st.latex(r"KE = \frac{1}{2} m V^2")
+    st.caption("Mavi sütun neden yukarı çıkarken azalıyor? Çünkü hız azalıyor!")
+    st.code(f"KE = 0.5 * {m} * {hiz}^2 = {0.5*m*hiz**2:.0f} J")
 
-with col_formul2:
+with col_f2:
     st.subheader("🟠 Potansiyel Enerji (Yükseklik)")
-    st.write("Cismin yüksekliğinden kaynaklanan enerjidir.")
-    st.latex(r"PE = m \cdot g \cdot h")
-    st.markdown("**Tepe Noktası İçin Hesap:**")
-    st.code(f"""
-PE = {m} * {g} * {h_max:.1f}
-PE = {m * g * h_max:.1f} Joule
-    """)
-    st.info("En tepede PE maksimumdur.")
+    st.latex(r"PE = m g h")
+    st.caption("Turuncu sütun tepe noktasında en yüksektir.")
+    st.code(f"PE_max = {m} * {g} * {h_max:.1f} = {m*g*h_max:.0f} J")
 
-# --- İNTERAKTİF SORU KISMI ---
-with col_soru:
-    st.error("📝 SIRA SENDE: Kendini Dene!")
+with col_q:
+    st.error("📝 SIRA SENDE")
+    st.write(f"Soru: Tepe noktasında dikey hız (yeşil ok) ne olur?")
     
-    # Soruyu dinamik olarak üretiyoruz
-    st.write(f"Soru: Cisim **{hiz} m/s** hızla fırlatıldı. Sence tepe noktasında **Kinetik Enerjisi (KE)** kaç Joule olur?")
+    cevap = st.radio("Cevabını Seç:", ["Maksimum olur", "Sıfır olur", "Değişmez"])
     
-    # Doğru Cevap: Tepe noktasında sadece Yatay Hız (Vx) vardır. Vy sıfırdır.
-    # KE_tepe = 0.5 * m * (Vx)^2
-    dogru_cevap = 0.5 * m * vx**2
-    
-    kullanici_cevabi = st.number_input("Cevabını buraya yaz (Joule):", step=1.0)
-    
-    if st.button("Cevabı Kontrol Et"):
-        # Küçük hesaplama farklarını tolere et (0.5 farka kadar)
-        if abs(kullanici_cevabi - dogru_cevap) <= 1.0:
+    if st.button("Kontrol Et"):
+        if cevap == "Sıfır olur":
             st.balloons()
-            st.success(f"BRAVO! 🎉 Doğru bildin. Tepe noktasında sadece yatay hız ({vx:.1f} m/s) kaldığı için KE sıfırlanmaz, azalır.")
+            st.success("DOĞRU! 🎉 Tepe noktasında cisim bir anlığına dikeyde durur.")
         else:
-            st.warning("Maalesef yanlış. 😔 İpucu: Tepe noktasında cisim durmaz, yatayda gitmeye devam eder!")
-            with st.expander("Çözümü Gör"):
-                st.write(f"Tepe noktasında dikey hız 0 olur ama yatay hız ($V_x$) değişmez.")
-                st.write(f"1. Yatay Hız ($V_x$) = {vx:.2f} m/s")
-                st.write(f"2. Formül: $KE = 0.5 \\cdot m \\cdot (V_x)^2$")
-                st.write(f"3. Hesap: $0.5 \\cdot 1 \\cdot {vx:.2f}^2 = {dogru_cevap:.1f}$ Joule")
+            st.warning("Yanlış. Tepe noktasında cisim daha fazla yükselemez, yani dikey hızı biter.")
